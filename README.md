@@ -27,3 +27,12 @@ The 10X matrices are not redistributed in this repository. They are publicly ava
 ## Reproducibility
 
 Open `Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.Rmd` in RStudio with the working directory set to the project root. The script creates `write/figures/`, `write/tables/`, and `checkpoints/` on first run; these directories are not committed.
+
+## Repository contents
+
+- `Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.Rmd`: full analysis script
+- `Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.pdf`: written report
+- `_Presentation__Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.pdf`: project presentation
+- `ClusterMarkers.csv`: FindAllMarkers output table
+- `README.md`
+- `.gitignore`
