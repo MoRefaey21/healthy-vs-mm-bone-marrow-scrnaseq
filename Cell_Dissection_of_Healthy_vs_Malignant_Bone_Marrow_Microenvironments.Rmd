@@ -1,0 +1,1385 @@
+---
+title: "Single-Cell Dissection of Healthy vs Malignant Bone Marrow Microenvironments"
+author: "Yasmine M. Elgohary, Mohammed A. Refaey, Tuqa N. Mahmoud, Mohamed M. Wafy"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+
+# R Markdown setup
+
+```{r setup, include=FALSE}
+
+root.directory <- dirname(rstudioapi::getActiveDocumentContext()$path)
+# setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+knitr::opts_knit$set(root.dir = root.directory)
+
+dir.create("write/figures/", recursive = T)
+dir.create("write/tables/", recursive = T)
+dir.create("checkpoints",   recursive = T, showWarnings = F)
+
+options(stringsAsFactors = FALSE)
+```
+
+# Packages
+
+```{r}
+suppressMessages(library(tidyverse))
+suppressMessages(library(Seurat))
+suppressMessages(library(SCpubr))
+suppressMessages(library(scater))
+suppressMessages(library(SingleR))
+suppressMessages(library(celldex))
+suppressMessages(library(CellChat))
+suppressMessages(library(ComplexHeatmap))
+suppressMessages(library(patchwork))
+suppressMessages(library(EnhancedVolcano))
+```
+
+# 1. Data Import
+
+```{r}
+
+
+
+
+
+
+
+
+
+control = 'mtx_data/control'
+malignant_dir = 'mtx_data/malignant'
+
+healthy <- Read10X(control)
+malignant <- Read10X(malignant_dir)
+```
+
+## 2. Merging samples
+
+```{r}
+# Healthy
+H <- as.matrix(healthy)
+colnames(H) <- paste(colnames(H),"H", sep = "_")
+
+# Malignant
+M <- as.matrix(malignant)
+colnames(M) <- paste(colnames(M),"M", sep = "_")
+
+x <- cbind(H, M)
+
+# we remove these file to save memory.
+rm(H, M)
+rm(healthy, malignant)
+```
+
+# 3. Seurat Object Instantiation
+
+```{r Seurat-Object}
+# Seurat Object Instantiation
+seu <- CreateSeuratObject(counts = x, project = "RNA-pro")
+
+# Condition Annotation
+seu$condition <- ifelse(
+  str_split(string = colnames(seu), pattern = "_", simplify = TRUE)[,2] == "H",
+  "Healthy",
+  "Malignant"
+)
+
+# Mitochondrial Genes Percentage Quantification
+seu[["percent.mt"]] <- PercentageFeatureSet(seu, pattern = "^MT-")
+
+# Seurat Object Metadata Exploration
+# view(seu@meta.data)
+```
+
+## Saving
+
+```{r}
+saveRDS(seu, "checkpoints/seu.rds")
+```
+
+# 4. QC
+
+## 4.1 Cell QC
+
+### 4.1.1 Library Size
+
+```{r QC-Library-Size, fig.height=6, fig.width=6}
+# Violin Plot
+VlnPlot(object = seu,
+        features = "nCount_RNA",
+        group.by = "condition") + labs(title = "Library Size")
+
+
+ggsave(filename = "write/figures/Library Size Violin Plot.png",
+       height = 10,
+       width = 10)
+
+ggplot(data = seu@meta.data,
+       aes(x = nCount_RNA)
+       ) +
+ geom_histogram(aes(fill = condition)) + labs(x = "Library Size", 
+                                               y = "Frequency",
+                                               title = "Library Size Histogram") + 
+  facet_grid(condition ~ .) 
+
+
+
+# MAD Thresholds
+outlier_counts <- isOutlier(metric = seu@meta.data$nCount_RNA,
+          nmads = 3,
+          log = T)
+counts_thresholds <- attr(outlier_counts, "thresholds")
+
+#changing the threshold to suit the data more 
+counts_thresholds[1] <- 300
+counts_thresholds[2] <- 50000
+
+# Histogram
+seu@meta.data %>% ggplot(aes(x = nCount_RNA)) + 
+  geom_histogram(aes(fill = condition)) + labs(x = "Library Size", 
+                                               y = "Frequency",
+                                               title = "Library Size Histogram") + 
+  facet_grid(condition ~ .) + geom_vline(xintercept = counts_thresholds)
+ggsave(filename = "write/figures/Library Size Histogram.png",
+       height = 10,
+       width = 10)
+```
+
+### 4.1.2 Total features
+
+```{r QC-Total-Features, fig.height=6, fig.width=6}
+# Violin Plot
+VlnPlot(object = seu,
+        features = "nFeature_RNA",
+        group.by = "condition") + labs(title = "Total Features")
+ggsave(filename = "write/figures/Total Features Violin Plot.png",
+       height = 10,
+       width = 10)
+
+# MAD Thresholds
+outlier_features <- isOutlier(metric = seu@meta.data$nFeature_RNA,
+          nmads = 3,
+          log = T)
+features_thresholds <- attr(outlier_features, "thresholds")
+
+#changing the threshold to suit the data more 
+features_thresholds[1] = 200
+features_thresholds[2] = 6000
+
+# Histogram
+seu@meta.data %>% ggplot(aes(x = nFeature_RNA, fill = condition)) + 
+  geom_histogram() + labs(x = "Total Features", 
+                                               y = "Frequency",
+                                               title = "Total Features Histogram") +
+  facet_grid(condition ~ .) + geom_vline(xintercept = features_thresholds)
+ggsave(filename = "write/figures/Total Features Histogram.png",
+       height = 10,
+       width = 10)
+```
+
+### 4.1.3 Percentage Mitochondrial Genes
+
+```{r QC-Mitochondrial-Genes,fig.height=6, fig.width=6}
+# Violin Plot
+VlnPlot(object = seu,
+        features = "percent.mt",
+        group.by = "condition") + labs(title = "% Mitochondrial Genes")
+ggsave(filename = "write/figures/Percentage Mitochondrial Genes Violin Plot.png",
+       height = 10,
+       width = 10)
+
+# Histogram
+seu@meta.data %>% ggplot(aes(x = percent.mt)) + 
+  geom_histogram(aes(fill = condition)) + labs(x = "% Mitochondrial Genes", 
+                                               y = "Frequency",
+                                               title = "% Mitocondrial Features Histogram") +
+  facet_grid(condition ~ .) + geom_vline(xintercept = 15)
+ggsave(filename = "write/figures/Percentage Mitochondrial Genes Histogram.png",
+       height = 10,
+       width = 10)
+```
+
+### 4.1.4 Combined Scatter Plot
+
+```{r Combined-Scatter-Plot,fig.height=6, fig.width=6}
+# ScatterPlot
+seu@meta.data %>%
+  ggplot(aes(nCount_RNA,
+             nFeature_RNA,
+             colour = percent.mt)) +
+  geom_point() +
+  labs(title = "QC Metrics Combined", 
+       x = "Library Size", 
+       y = "Detected Features", 
+       color = "% Mitochondrial Genes") + 
+  scale_color_viridis_c() + 
+  facet_grid(condition ~ .) + geom_vline(xintercept = counts_thresholds) + geom_hline(yintercept = features_thresholds)
+
+ggsave(filename = "write/figures/QC Metrics Scatter Plot.png",
+       height = 15,
+       width = 10)
+```
+
+### 4.1.5 Cell Filtration
+
+```{r Cell-Filtration}
+# Classical QC
+ncol(seu) #13685
+
+seu_subset <- subset(seu, subset = (nCount_RNA > counts_thresholds[1]) & (nCount_RNA < counts_thresholds[2]) & (nFeature_RNA > features_thresholds[1]) & (nFeature_RNA < features_thresholds[2]) & (percent.mt < 15))
+
+ncol(seu_subset) #12761
+
+# Saving memory
+rm(seu)
+```
+
+## 4.2 Genes QC
+
+-   This filtration step will remove all features that do not have non-zero accounts in at least 3 cells.
+
+```{r Gene-QC}
+nrow(seu_subset) #33538
+
+filter3 <- function(seurat){
+  #Threshold
+  threshold <- 3
+  #Raw Counts
+  counts <- seurat@assays$RNA$`counts`
+  rawcounts <- as.matrix(counts)
+  #Number of cells where expression is greater than zero for each gene
+  sums <- rowSums(rawcounts > 0)
+  #Genes that are expressed in a number of cells greater than threshold
+  sums_2 <- sums[sums > threshold]
+  #Filtering and dimensions of Seurat object before and after
+  seurat <- seurat[names(sums_2),]
+  return(seurat)
+}
+
+seu_subset <- filter3(seurat = seu_subset)
+
+nrow(seu_subset) #18546
+```
+
+# 5. Normalization, variable features selection, and scaling data
+
+```{r Normalisation-Cell-Cycle-Scoring}
+# Normalisation, Variable Feature Selection, Data Scaling
+seu_subset <- NormalizeData(seu_subset)
+seu_subset <- FindVariableFeatures(seu_subset)
+seu_subset <- ScaleData(seu_subset, features = rownames(seu_subset))
+```
+
+# 6. SCTransform
+
+## 6.1 SCTransform Run
+
+```{r SCTransform}
+# SCTransform
+seu_subset <- suppressWarnings(SCTransform(object = seu_subset, variable.features.n = 3000))
+
+# Available Assays
+seu_subset@assays
+
+# Active Assay Check
+seu_subset@active.assay
+```
+
+## 6.2 Visualizing variable features
+
+```{r}
+# Identifying top 10 features to include in the plot
+top10 <- head(VariableFeatures(seu_subset), 10)
+
+# Visualizing
+p1 <- VariableFeaturePlot(seu_subset)
+
+p1 <- LabelPoints(
+  plot = p1,
+  points = top10,
+  repel = T
+)
+
+p1
+
+ggsave("write/figures/Variable Features Top10.png",
+       plot   = p1,
+       height = 10,
+       width  = 15,
+       bg = "white"
+)
+```
+
+# 7. Cell Cycle Scoring & Assignment
+
+```{r}
+# Cell Cycle Scoring
+seu_subset <- CellCycleScoring(
+  seu_subset, 
+  s.features =  cc.genes.updated.2019$s.genes, 
+  g2m.features = cc.genes.updated.2019$g2m.genes,
+  set.ident = TRUE)
+
+table(seu_subset$Phase)
+#   G1  G2M    S 
+# 7929 2304 2528 
+```
+
+# 8. Dimensionality Reduction
+
+## 8.1 Principal Component Analysis (PCA)
+
+```{r PCA, fig.height=6, fig.width=6}
+# PCA
+seu_subset <- RunPCA(seu_subset)
+
+# Visualization
+#Phase
+do_DimPlot(
+  seu_subset,
+  group.by = "Phase",
+  pt.size = 1.5,
+  plot.title = "Phase",
+  plot.axes = T)
+
+ggsave(filename = "write/figures/Cell Cycle Phase PCA.png",
+       height = 10,
+       width = 15)
+
+do_DimPlot(
+  seu_subset,
+  group.by = "condition",
+  pt.size = 1.5,
+  plot.title = "Condition",
+  plot.axes = T)
+
+ggsave(filename = "write/figures/Condition PCA.png",
+       height = 10,
+       width = 15)
+```
+
+### 8.1.1 Checking for Technical Variation
+
+```{r PCA-QC, fig.height=6, fig.width=6}
+# Technical Factors
+## Library Size
+
+do_FeaturePlot(seu_subset, 
+        reduction = "pca", 
+        features = "nCount_RNA",
+        split.by = "condition",
+        dims = c(1,2),
+               use_viridis = T,
+        viridis.palette = "B",
+        viridis.direction = -1, 
+         pt.size = 1.5,
+        plot.title = "Library Size", 
+        plot.axes = T)
+
+ggsave(filename = "write/figures/Library Size PCA.png",
+       height = 10,
+       width = 15)
+
+## Total Number of Features
+do_FeaturePlot(seu_subset, 
+        reduction = "pca", 
+        features = "nFeature_RNA", 
+         split.by ="condition",
+        dims = c(1,2),
+        use_viridis = T,
+        viridis.palette = "B",
+        viridis.direction = -1,
+        pt.size = 1.5, 
+        plot.title = "Total Features",
+        plot.axes = T)
+
+ggsave(filename = "write/figures/Total Features PCA.png",
+       height = 10,
+       width = 15)
+
+## Percentage MT
+do_FeaturePlot(seu_subset, 
+        reduction = "pca", 
+        features = "percent.mt", 
+        dims = c(1,2),
+         split.by ="condition",
+        use_viridis = T,
+        viridis.palette = "B",
+        viridis.direction = -1, 
+        pt.size = 1.5,
+        plot.title = "% Mitochondrial Genes",
+        plot.axes = T)
+
+ggsave(filename = "write/figures/Percentage Mitochondrial Genes PCA.png",
+       height = 10,
+       width = 15)
+```
+
+-   From the above figures, we notice that:
+
+    -   Technical factors are not the primary sources of variation in the data.
+
+### 8.1.2 Condition of Interest
+
+-   Here, we check for the PCs along which the primary source of variation is our condition of interest.
+
+```{r PCA-Condition, fig.height=6, fig.width=6}
+## Condition
+do_DimPlot(seu_subset, 
+        reduction = "pca", 
+        dims = c(1,2), 
+        group.by = "condition")
+
+do_DimPlot(seu_subset, 
+        reduction = "pca", 
+        dims = c(2,3), 
+        group.by = "condition")
+
+do_DimPlot(seu_subset, 
+        reduction = "pca", 
+        dims = c(3,4), 
+        group.by = "condition")
+
+do_DimPlot(seu_subset, 
+        reduction = "pca", 
+        dims = c(4, 5), 
+        group.by = "condition")
+
+do_DimPlot(seu_subset, 
+        reduction = "pca", 
+        dims = c(5,6), 
+        group.by = "condition")
+```
+
+### 8.1.3 Cell Cycle Regression
+
+-   Given that the focus of this analysis is not cell cycle-driven variation, we will regress out cell cycle variation using `SCTransform()`, as is shown in the code below. We then run PCA on the updated count matrices and re-do the visualizations to ensure that cell cycle variation is no longer a primary driver.
+
+```{r PCA-CellCycleRegression, fig.height=6, fig.width=6}
+# SCTransform (Cell Cycle Regression)
+seu_subset <- suppressWarnings(SCTransform(object = seu_subset, 
+                                           variable.features.n = 3000, 
+                                           vars.to.regress = "Phase"))
+# PCA
+seu_subset <- RunPCA(seu_subset, 
+              features = VariableFeatures(object = seu_subset), 
+              verbose = FALSE)
+```
+
+After regression of the cell cycle above, we will re-do the visualizations:
+
+```{r PCA-CellCycleRegression}
+# Visualisation
+do_DimPlot(seu_subset, 
+           reduction = "pca", 
+           dims = c(1,2), 
+           group.by = "Phase", 
+           pt.size = 1.5,
+           plot.axes = T)
+
+ggsave(filename = "write/figures/Cell Cycle Phase PCA (After Cell Cycle Regression).png",
+       height = 10,
+       width = 15)
+
+do_DimPlot(seu_subset, 
+        reduction = "pca", 
+        dims = c(4,5), 
+        group.by = "condition", 
+        pt.size = 1.5, 
+        plot.axes = T,
+        split.by = "condition")
+
+ggsave(filename = "write/figures/Condition PCA (After Cell Cycle Regression).png",
+       height = 10,
+       width = 15)
+```
+
+### 8.1.4 Elbow Plot
+
+```{r ElbowPlot}
+ElbowPlot(seu_subset, 
+          ndims = 40)
+
+ggsave(filename = "write/figures/PCA Elbow Plot.png",
+       height = 10,
+       width = 15)
+
+pcs_use <- 1:20
+```
+
+## 8.2 UMAP
+
+### 8.2.1 UMAP Run
+
+```{r UMAP-Run}
+seu_subset <- RunUMAP(seu_subset, 
+                      dims = pcs_use)
+```
+
+### 8.2.2 UMAP Results Visualisation
+
+```{r UMAP-Viz, fig.height=6, fig.width=6}
+# Visualisation
+## Condition
+do_DimPlot(seu_subset, 
+           reduction = "umap", 
+           group.by = "condition", 
+           pt.size = 1.5,
+           plot.axes = T)
+
+ggsave(filename = "write/figures/Condition UMAP.png",
+       height = 10,
+       width = 15)
+
+## Cell Cycle Phase
+do_DimPlot(seu_subset, 
+           reduction = "umap", 
+           group.by = "Phase", 
+           pt.size = 1.5,
+           plot.axes = T)
+
+ggsave(filename = "write/figures/Cell Cycle Phase UMAP.png",
+       height = 10,
+       width = 15)
+```
+
+## Saving & Loading
+
+```{r}
+#Saving
+saveRDS(seu_subset,"checkpoints/seu_subset.rds")
+
+#Loading
+seu_subset <- readRDS("checkpoints/seu_subset.rds")
+```
+
+# 9. Differential Expression Analysis
+
+## 9. FindMarkers
+
+```{r}
+markers <- FindMarkers(
+  seu_subset,
+  group.by = "condition",
+  ident.1 = "Malignant",
+  ident.2 = "Healthy",
+  test.use = "wilcox",
+  logfc.threshold = 0.25,
+  min.pct = 0.10)
+
+# Saving the markers as a table
+# Adding gene names and regulation annotation to the table
+markers_export <- markers %>% 
+  rownames_to_column(var = "gene") %>%            
+  mutate(regulation = ifelse(avg_log2FC > 0,
+                             "Up", 
+                             "Down"))
+write_csv(
+  markers_export,
+  "write/tables/Markers.csv"
+)
+```
+
+## 9.2 Visualization
+
+### 9.2.1 Volcano Plot
+
+```{r}
+EnhancedVolcano(
+  markers,
+  lab = rownames(markers),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  title = "Healthy vs Malignant cells",
+  pCutoff = 0.05,
+  FCcutoff = 0.25,
+  labSize = 3,
+  xlim = c(-10,10))
+
+ggsave(filename = "write/figures/Volcano Plot.png",
+       height = 10,
+       width = 15)
+```
+
+### 9.2.2 Condition Heatmap
+
+```{r}
+DoHeatmap(
+  subset(
+    seu_subset,
+    features = markers |>
+      arrange(desc(avg_log2FC)) |> 
+    slice_max(order_by = avg_log2FC, n = 20) |> 
+    rownames()
+  ),
+  group.by = "condition",
+  label = TRUE
+)
+ggsave(filename = "write/figures/DEA Heatmap.png",
+       height = 10,
+       width = 15)
+```
+
+# Splitting the Seurat Object into Two Objects by Condition
+
+```{r}
+malignant_obj <- subset(seu_subset, subset = condition == "Malignant")
+
+healthy_obj   <- subset(seu_subset, subset = condition == "Healthy")
+```
+
+# 10. Clustering
+
+## 10.1 Louvain Clustering (Multiple Resolutions)
+
+```{r Clustering}
+# Healthy
+for(i in seq(0,1,0.1)){
+healthy_obj <- healthy_obj %>%
+  FindNeighbors(reduction = "pca",
+                dims = 1:20,
+                verbose = F) %>%
+  FindClusters(resolution = i,
+               verbose = F)
+}
+
+# Malignant
+for(i in seq(0,1,0.1)){
+malignant_obj <- malignant_obj %>%
+  FindNeighbors(reduction = "pca",
+                dims = 1:20,
+                verbose = F) %>%
+  FindClusters(resolution = i,
+               verbose = F)
+}
+```
+
+## 10.2 Clustering Trees
+
+### 10.2.1 Healthy
+
+```{r Clustering-Trees, fig.height=10, fig.width=15}
+#Clustering Tree (with resolutions)
+c1 <- clustree::clustree(x = healthy_obj) +
+  guides(edge_colour = FALSE, edge_alpha = FALSE) +
+  theme(legend.position = "bottom")
+
+# Clustering Tree (with SC3 Stability Index)
+c2 <- clustree::clustree(
+  x = healthy_obj,
+  node_colour = "sc3_stability"
+) +
+  guides(edge_colour = FALSE, edge_alpha = FALSE) +
+  theme(legend.position = "bottom") +
+  scale_color_viridis_c(option = "B")
+
+c1 + c2
+ggsave("write/figures/healthyClustrees.png",
+  height = 10,
+  width = 15
+)
+
+# Final Clustering Resolution
+healthy_obj <- healthy_obj %>%
+  FindNeighbors(
+    reduction = "pca",
+    dims = 1:20,
+    verbose = F
+  ) %>%
+  FindClusters(
+    resolution = 0.4,
+    verbose = F
+  )
+```
+
+### 10.2.2 Malignant
+
+```{r}
+c1 <- clustree::clustree(x = malignant_obj) +
+  guides(edge_colour = FALSE, edge_alpha = FALSE) +
+  theme(legend.position = "bottom")
+
+# Clustering Tree (with SC3 Stability Index)
+c2 <- clustree::clustree(
+  x = malignant_obj,
+  node_colour = "sc3_stability"
+) +
+  guides(edge_colour = FALSE, edge_alpha = FALSE) +
+  theme(legend.position = "bottom") +
+  scale_color_viridis_c(option = "B")
+
+c1 + c2
+ggsave("write/figures/Malignant_Clustrees.png",
+  height = 10,
+  width = 15
+)
+
+# Final Clustering Resolution
+malignant_obj <- malignant_obj %>%
+  FindNeighbors(
+    reduction = "pca",
+    dims = 1:20,
+    verbose = F
+  ) %>%
+  FindClusters(
+    resolution = 0.4,
+    verbose = F
+  )
+```
+
+## 10.3 Clustering Results Visualization
+
+### 10.3.1 Healthy
+
+```{r Clustering-Results-Viz, fig.height=6, fig.width=7}
+p1 <- do_DimPlot(healthy_obj,
+  reduction = "umap",
+  group.by = "seurat_clusters",
+  label = T,
+  pt.size = 1.5,
+  plot.axes = T
+)
+
+p1
+ggsave(
+  filename = "write/figures/healthy Seurat Clusters UMAP.png",
+  plot = p1,
+  height = 10,
+  width = 10
+)
+```
+
+### 10.3.2 Malignant
+
+```{r}
+p1 <- do_DimPlot(malignant_obj,
+  reduction = "umap",
+  group.by = "seurat_clusters",
+  label = T,
+  pt.size = 1.5,
+  plot.axes = T
+)
+
+p1
+ggsave(
+  filename = "write/figures/malignant Seurat Clusters UMAP.png",
+  plot = p1,
+  height = 10,
+  width = 10
+)
+```
+
+# 11. Feature Plots & Violin Plots
+
+```{r Features-Viz-UMAP,fig.height=20, fig.width=20}
+# Feature Plots
+features <- head(VariableFeatures(seu_subset))
+
+plots <- do_FeaturePlot(
+  sample = seu_subset,
+  features = features,
+  reduction = "umap",
+  ncol = 3,
+  viridis.direction = -1,
+  viridis.palette = "B",
+  use_viridis = TRUE,
+  pt.size = 1.5, group.by = 'condition'
+)
+for (i in seq_along(plots)) {
+  plots[[i]] <- plots[[i]] + ggtitle(features[i])
+}
+
+# Then display them together
+library(patchwork)
+wrap_plots(plots)
+
+
+ggsave(
+  filename = "write/figures/Features_FeaturePlots.png",
+  height = 15,
+  width = 20
+)
+```
+
+# 12. Cell Type annotation
+
+## **12.1 Healthy**
+
+### 12.1.1 **Cluster-based**
+
+```{r}
+all_markers <- FindAllMarkers(
+  healthy_obj,
+  group.by = "seurat_clusters",
+  only.pos = TRUE,
+  logfc.threshold = 0.050,
+  min.pct = 0.15,
+  return.thresh = 0.05
+)
+
+
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+expression_matrix <- GetAssayData(healthy_obj, slot = 'data', assay = "RNA")
+  
+clusters <- healthy_obj$seurat_clusters
+exp.matrix <- as.SingleCellExperiment(healthy_obj,slot = 'data', assay = "RNA")
+
+
+singler_clusters <- SingleR(
+  test = expression_matrix,
+  ref = ref,
+  labels = ref$label.main,
+  clusters = clusters
+)
+
+
+cell_classes <- singler_clusters$pruned.labels
+
+names(cell_classes) <- levels(healthy_obj$seurat_clusters)
+
+healthy_obj$annotated_clusters <- unname(cell_classes[as.character(healthy_obj$seurat_clusters)])
+
+unique(healthy_obj$annotated_clusters)
+```
+
+### **12.1.2 Cell-based**
+
+```{r}
+
+all_markers <- FindAllMarkers(
+  healthy_obj,
+  group.by = "seurat_clusters",
+  only.pos = TRUE,
+  logfc.threshold = 0.050,
+  min.pct = 0.15,
+  return.thresh = 0.05
+)
+
+
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+expression_matrix <- GetAssayData(healthy_obj, slot = 'data', assay = "RNA")
+  
+clusters <- healthy_obj$seurat_clusters
+exp.matrix <- as.SingleCellExperiment(healthy_obj,slot = 'data', assay = "RNA")
+
+
+singler_clusters <- SingleR(
+  test = expression_matrix,
+  ref = ref,
+  labels = ref$label.main,
+)
+
+
+cell_classes <- singler_clusters$pruned.labels
+
+
+healthy_obj$annotated_cells <- cell_classes
+healthy_obj <- subset(healthy_obj, subset = !is.na(annotated_cells))
+
+unique(healthy_obj$annotated_cells)
+
+# Plotting cell type UMAP
+do_DimPlot(
+  healthy_obj,
+  reduction = "umap",
+  group.by = "annotated_cells",
+  plot.axes = T,
+  label = T,
+  repel = T,
+  pt.size = 1.5
+)
+ggsave(
+  filename = "write/figures/SingleR cell type annotation UMAP (Healthy).png",
+  height = 10,
+  width = 15
+)
+```
+
+## 12.2 Malignant
+
+### 12.2.1 **Cluster-based**
+
+```{r}
+all_markers <- FindAllMarkers(
+  malignant_obj,
+  group.by = "seurat_clusters",
+  only.pos = TRUE,
+  logfc.threshold = 0.050,
+  min.pct = 0.15,
+  return.thresh = 0.05
+)
+
+
+
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+expression_matrix <- GetAssayData(malignant_obj, slot = 'data', assay = "RNA")
+  
+clusters <- malignant_obj$seurat_clusters
+exp.matrix <- as.SingleCellExperiment(malignant_obj,slot = 'data', assay = "RNA")
+
+
+singler_clusters <- SingleR(
+  test = expression_matrix,
+  ref = ref,
+  labels = ref$label.main,
+  clusters = clusters
+)
+
+
+cell_classes <- singler_clusters$pruned.labels
+
+names(cell_classes) <- levels(malignant_obj$seurat_clusters)
+
+malignant_obj$annotated_clusters <- unname(cell_classes[as.character(malignant_obj$seurat_clusters)])
+
+unique(malignant_obj$annotated_clusters)
+```
+
+### **12.2.2 Cell-based**
+
+```{r}
+all_markers <- FindAllMarkers(
+  malignant_obj,
+  group.by = "seurat_clusters",
+  only.pos = TRUE,
+  logfc.threshold = 0.050,
+  min.pct = 0.15,
+  return.thresh = 0.05
+)
+
+
+
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+expression_matrix <- GetAssayData(malignant_obj, slot = 'data', assay = "RNA")
+  
+clusters <- malignant_obj$seurat_clusters
+
+
+
+singler_clusters <- SingleR(
+  test = expression_matrix,
+  ref = ref,
+  labels = ref$label.main,
+)
+
+
+cell_classes <- singler_clusters$pruned.labels
+malignant_obj$annotated_cells <- cell_classes
+malignant_obj <- subset(malignant_obj, subset = !is.na(annotated_cells))
+
+unique(malignant_obj$annotated_cells)
+
+# Plotting cell type UMAP
+do_DimPlot(
+  malignant_obj,
+  reduction = "umap",
+  group.by = "annotated_cells",
+  plot.axes = T,
+  label = T,
+  repel = T,
+  pt.size = 1.5
+) 
+ggsave(
+  filename = "write/figures/SingleR cell type annotation UMAP (Malignant).png",
+  height = 10,
+  width = 15
+)
+```
+
+## 12.3 Excluding non-shared Cell Types
+
+```{r}
+# Cell types present in both malignant and healthy
+shared_types <- intersect(
+  unique(malignant_obj$annotated_cells),
+  unique(healthy_obj$annotated_cells)
+)
+
+# Filtering malignant
+malignant_obj <- subset(
+  malignant_obj,
+  subset = annotated_cells %in% shared_types
+)
+
+# Filtering healthy
+healthy_obj <- subset(
+  healthy_obj,
+  subset = annotated_cells %in% shared_types
+)
+
+# Inspecting
+unique(healthy_obj$annotated_cells)
+unique(malignant_obj$annotated_cells)
+```
+
+**Cells in the healthy object after subsetting:**
+
+```         
+[1] "Myelocyte"        "Neutrophils"      "HSC_-G-CSF"       "Pro-Myelocyte"    "Monocyte"         "NK_cell"
+[7] "T_cells"          "BM"               "B_cell"           "CMP"              "Platelets"        "Pre-B_cell_CD34-"
+[13] "GMP"              "MEP"              "Erythroblast"     "Pro-B_cell_CD34+" 
+```
+
+**Cells in the malignant object after subsetting:**
+
+```         
+[1] "Pro-Myelocyte"    "Myelocyte"        "Neutrophils"      "Monocyte"         "B_cell"           "T_cells"
+[7] "Pre-B_cell_CD34-" "Pro-B_cell_CD34+" "MEP"              "GMP"              "NK_cell"          "CMP"
+[13] "HSC_-G-CSF"       "Platelets"        "Erythroblast"     "BM"
+```
+
+## Saving & Loading
+
+```{r}
+#Saving
+saveRDS(healthy_obj, file = "checkpoints/healthy_seurat.rds")
+saveRDS(malignant_obj, file = "checkpoints/malignant_seurat.rds")
+
+#Loading
+healthy_obj <- readRDS("checkpoints/healthy_seurat.rds")
+malignant_obj <- readRDS("checkpoints/malignant_seurat.rds")
+```
+
+# 13. CellChat
+
+## 13.1 Creating CellChat Objects from the Seurat Objects
+
+```{r}
+# Healthy:
+chat_healthy <- createCellChat(healthy_obj, group.by = "annotated_cells")
+
+# Attaching the human LR database to the object and keeping only secreted signalling genes
+chat_healthy@DB <- CellChatDB.human
+
+# subsetting the expression data of signaling genes
+chat_healthy <- subsetData(chat_healthy)
+
+# Inspecting available group names
+levels(chat_healthy@idents)
+
+# Malignant:
+chat_malignant <- createCellChat(malignant_obj, group.by = "annotated_cells")
+
+# Attaching the human LR database to the object and keeping only secreted signalling genes
+chat_malignant@DB <- CellChatDB.human
+
+# subsetting the expression data of signaling genes
+chat_malignant <- subsetData(chat_malignant)
+
+# Inspecting available group names
+levels(chat_malignant@idents)
+```
+
+**Healthy sample cell types:**
+
+```         
+[1] "B_cell"           "BM"               "CMP"              "Erythroblast"     "GMP"              "HSC_-G-CSF"
+[7] "MEP"              "Monocyte"         "Myelocyte"        "Neutrophils"      "NK_cell"          "Platelets"
+[13] "Pre-B_cell_CD34-" "Pro-B_cell_CD34+" "Pro-Myelocyte"    "T_cells"         
+```
+
+**Malignant sample cell types:**
+
+```         
+[1] "B_cell"           "BM"               "CMP"              "Erythroblast"     "GMP"              "HSC_-G-CSF"
+[7] "MEP"              "Monocyte"         "Myelocyte"        "Neutrophils"      "NK_cell"          "Platelets"
+[13] "Pre-B_cell_CD34-" "Pro-B_cell_CD34+" "Pro-Myelocyte"    "T_cells"         
+```
+
+## 13.2 Pre-processing & Communication Inference for Both Samples
+
+```{r}
+# Healthy:
+
+# Identifying over-expressed genes and interactions
+chat_healthy <- identifyOverExpressedGenes(chat_healthy)
+chat_healthy <- identifyOverExpressedInteractions(chat_healthy)
+# The number of highly variable ligand-receptor pairs used for signaling inference is 454
+
+# Computing communication probability & filtering low-cell groups
+chat_healthy <- computeCommunProb(chat_healthy, type = "triMean")
+chat_healthy <- filterCommunication(chat_healthy, min.cells = 10)
+#The cell-cell communication related with the following cell groups are excluded due to the few number of cells:  MEP, Pro-B_cell_CD34+ ! 	20.8% interactions are removed!
+
+# Inferring pathway-level communication
+chat_healthy <- computeCommunProbPathway(chat_healthy)
+chat_healthy <- aggregateNet(chat_healthy)
+
+# Inspecting the signalling pathways inferred
+unique(chat_healthy@netP$pathways)
+
+# Malignant:
+
+# Identifying over-expressed genes and interactions
+chat_malignant <- identifyOverExpressedGenes(chat_malignant)
+chat_malignant <- identifyOverExpressedInteractions(chat_malignant)
+# The number of highly variable ligand-receptor pairs used for signaling inference is 502 
+
+# Computing communication probability & filtering low-cell groups
+chat_malignant <- computeCommunProb(chat_malignant, type = "triMean")
+chat_malignant <- filterCommunication(chat_malignant, min.cells = 10)
+#The cell-cell communication related with the following cell groups are excluded due to the few number of cells:  BM, Platelets, Pro-B_cell_CD34+ ! 	27.8% interactions are removed!
+
+
+# Inferring pathway-level communication
+chat_malignant <- computeCommunProbPathway(chat_malignant)
+chat_malignant <- aggregateNet(chat_malignant)
+
+# Inspecting the signalling pathways inferred
+unique(chat_malignant@netP$pathways)
+```
+
+**Healthy sample Inferred Pathways:**
+
+```         
+[1] "MHC-I"         "RESISTIN"      "MIF"           "ANNEXIN"       "CypA"          "CD99"          "GALECTIN"
+[8] "APP"           "CLEC"          "MHC-II"        "CTSG"          "PECAM1"        "CCL"           "ADGRE"
+[15] "CXCL"          "CEACAM"        "SELPLG"        "Prostaglandin" "CD45"          "SELL"          "BAFF"
+[22] "PARs"          "MK"            "CD48"          "ICAM"          "CD23"          "PECAM2"        "LCK"
+[29] "IL1"           "Cholesterol"   "IL16"          "BTLA"          "SEMA4"         "CD160"         "LAIR1"
+[36] "NEGR"  
+```
+
+**Malignant sample Inferred Pathways:**
+
+```         
+[1] "MHC-I"         "ANNEXIN"       "RESISTIN"      "MIF"           "CypA"          "CTSG"          "GALECTIN"
+[8] "CLEC"          "CD99"          "MK"            "Prostaglandin" "CXCL"          "SELL"          "ADGRE"
+[15] "PARs"          "THBS"          "BAFF"          "IL1"           "CEACAM"        "LCK"           "CD160"
+[22] "CysLTs" 
+```
+
+## 13.3 Network Centrality
+
+```{r}
+# Healthy
+chat_healthy <- netAnalysis_computeCentrality(chat_healthy, slot.name = "netP")
+
+# Malignant
+chat_malignant <- netAnalysis_computeCentrality(chat_malignant, slot.name = "netP")
+```
+
+## Saving & Loading
+
+```{r}
+# Saving
+saveRDS(chat_healthy, "checkpoints/chat_healthy.rds")
+saveRDS(chat_malignant, "checkpoints/chat_malignant.rds")
+
+# Loading
+chat_healthy <- readRDS("checkpoints/chat_healthy.rds")
+chat_malignant <- readRDS("checkpoints/chat_malignant.rds")
+```
+
+## 13.3 Merging the Samples
+
+```{r}
+object.list <- list(Healthy = chat_healthy, Malignant = chat_malignant)
+
+cellchat <- mergeCellChat(object.list, add.names = names(object.list))
+
+cellchat
+```
+
+## Saving & Loading
+
+```{r}
+saveRDS(cellchat, "checkpoints/cellchat.rds")
+cellchat <- readRDS("checkpoints/cellchat.rds")
+```
+
+## 13.4 Visualization
+
+### 13.4.1 Total Interaction Counts & Weights
+
+```{r}
+gg1 <- compareInteractions(cellchat, show.legend = FALSE, group = c(1,2))
+
+gg2 <- compareInteractions(cellchat, show.legend = FALSE, group = c(1,2), measure = "weight")
+
+gg1 + gg2
+
+ggsave(
+  "write/figures/total_interaction_counts_weights.png",
+  plot = gg1 + gg2,
+  width = 12,
+  height = 6,
+  dpi = 300)
+```
+
+### 13.4.2 Differential Interaction Networks
+
+```{r}
+par(mfrow = c(1,2), xpd = TRUE)
+
+# Counts
+netVisual_diffInteraction(cellchat, weight.scale = TRUE)
+
+# Weights
+netVisual_diffInteraction(cellchat, weight.scale = TRUE, measure = "weight")
+```
+
+### 13.4.3 Heatmaps of Interaction Counts and Weights
+
+```{r}
+ht1 <- netVisual_heatmap(cellchat)
+
+ht2 <- netVisual_heatmap(cellchat, measure = "weight")
+
+combined_ht <- ht1 + ht2
+
+combined_ht
+
+png("write/figures/heatmaps_interaction_count_weight.png",
+    width  = 3000, height = 2000, res = 300)
+
+ComplexHeatmap::draw(combined_ht, heatmap_legend_side = "right")
+
+dev.off()
+```
+
+### 13.4.4 Circle Plots - Total Interaction Count  &  Strength (Healthy vs Malignant)
+
+```{r}
+#Count
+weight.max <- getMaxWeight(object.list, attribute = c("idents","count"))
+
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_circle(object.list[[i]]@net$count,
+                   weight.scale = T,
+                   label.edge= F,
+                   edge.weight.max = weight.max[2],
+                   edge.width.max = 12,
+                   title.name = paste0("Number of interactions - ",
+                                       names(object.list)[i]))
+}
+
+# Weight
+weight.max <- getMaxWeight(object.list, attribute = c("idents", "weight"))
+
+par(mfrow = c(1, 2), xpd = TRUE)
+for (i in seq_along(object.list)) {
+  netVisual_circle(object.list[[i]]@net$weight,
+                   weight.scale    = TRUE,
+                   label.edge      = FALSE,
+                   edge.weight.max = weight.max[2],
+                   edge.width.max  = 12,
+                   title.name      = paste0("Interaction strength – ",
+                                             names(object.list)[i]))
+}
+```
+
+### 13.4.5 Signaling Role Scatter Plot
+
+```{r}
+num.link <- sapply(
+  object.list,
+  function(x) {rowSums(x@net$count) +
+      colSums(x@net$count) - diag(x@net$count)})
+
+weight.MinMax <- c(min(num.link), max(num.link))
+
+gg <- list()
+
+for (i in 1:length(object.list)) {
+  gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax)
+}
+
+#Combines all scatter plots into a single panel 
+scatter_combined <- patchwork::wrap_plots(plots = gg)
+
+scatter_combined
+ggsave(
+  "write/figures/signaling_role_scatter.png",
+  scatter_combined,
+  width = 15,
+  height = 10,
+  dpi = 300)
+```
+
+### 13.4.6 Bubble Plots (T-Cells & B-Cells)
+
+```{r}
+# Showing all the significant interactions (L-R pairs) associated with the following specific pathway
+
+pathways.show <- c("MIF", "GALECTIN", "ANNEXIN")
+
+for (pw in pathways.show) {
+  p <- netVisual_bubble(
+         cellchat,
+         signaling = pw,          # one pathway at a time
+         angle.x   = 45,
+         comparison = c(1,2)
+       ) +
+    plot_annotation(
+         title = paste("Bubble plot of signals of ", pw, "Pathway Genes")
+       )
+
+  print(p)
+
+  ggsave(sprintf("write/figures/bubble_%s.png", pw), p,
+         width = 10, height = 15, dpi = 300)
+}
+```
+
+### 13.4.7 Hierarchy Plots (MIF, GALECTIN, ANNEXIN)
+
+```{r}
+
+weight.max <- getMaxWeight(object.list, slot.name = c("netP"), attribute = pathways.show) # control the edge weights across different datasets
+
+par(mfrow = c(1,2), xpd=TRUE)
+
+for (pw in pathways.show) {
+  max.w <- getMaxWeight(object.list, slot.name = "netP", attribute = pw)[1]
+  par(mfrow = c(1, 2), xpd = TRUE)
+  for (i in seq_along(object.list)) {
+    netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",
+                        edge.weight.max = max.w, edge.width.max = 10,
+                        signaling.name = paste(pw, names(object.list)[i]))
+  }
+}
+```
+
+### 13.4.8 Gene Expression Violin Plot (MIF, GALECTIN, ANNEXIN)
+
+```{r}
+cellchat@meta$datasets <- factor(
+  cellchat@meta$datasets,
+  levels = c("Healthy", "Malignant"))
+
+for (pw in pathways.show) {
+  p <- plotGeneExpression(
+    cellchat,
+    signaling = pw,
+    split.by = "datasets",
+    colors.ggplot = TRUE,
+    type = "violin") +
+    plot_annotation(
+         title = paste("Expression of", pw, "Pathway Genes"),
+         subtitle = "Healthy = blue  |  Malignant = red"
+       )  
+  
+  print(p)
+
+  ggsave(sprintf("write/figures/gene_expression_%s_violin.png", pw), p,
+         width = 12, height = 8, dpi = 300)
+}
+```
+
+## Saving CellChat Objects
+
+```{r}
+saveRDS(object.list, file = "cellchat_object.list_Healthy_Malignant.rds")
+
+saveRDS(cellchat, file = "cellchat_merged_Healthy_Malignant.rds")
+```
