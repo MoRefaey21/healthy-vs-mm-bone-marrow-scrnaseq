@@ -1,0 +1,12 @@
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+*_cache/
+*_files/
+checkpoints/
+write/
+*.rds
+assignment1/
+mtx_data/
+.DS_Store

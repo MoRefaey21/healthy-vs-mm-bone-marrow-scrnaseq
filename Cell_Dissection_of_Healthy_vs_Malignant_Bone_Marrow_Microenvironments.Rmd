@@ -1,6 +1,6 @@
 ---
 title: "Single-Cell Dissection of Healthy vs Malignant Bone Marrow Microenvironments"
-author: "Yasmine M. Elgohary, Mohammed A. Refaey, Tuqa N. Mahmoud, Mohamed M. Wafy"
+author: "Yasmine M. Elgohary, Mohammed Refaey, Tuqa N. Mahmoud, Mohamed M. Wafy"
 output: 
   html_document:
     toc: true
@@ -11,7 +11,7 @@ output:
 
 ```{r setup, include=FALSE}
 
-root.directory <- dirname(rstudioapi::getActiveDocumentContext()$path)
+root.directory <- if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) dirname(rstudioapi::getActiveDocumentContext()$path) else getwd()
 # setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 knitr::opts_knit$set(root.dir = root.directory)
@@ -472,7 +472,7 @@ seu_subset <- RunPCA(seu_subset,
 
 After regression of the cell cycle above, we will re-do the visualizations:
 
-```{r PCA-CellCycleRegression}
+```{r PCA-CellCycleRegression-plots}
 # Visualisation
 do_DimPlot(seu_subset, 
            reduction = "pca", 
@@ -824,7 +824,7 @@ all_markers <- FindAllMarkers(
 
 ref <- celldex::HumanPrimaryCellAtlasData()
 
-expression_matrix <- GetAssayData(healthy_obj, slot = 'data', assay = "RNA")
+expression_matrix <- GetAssayData(healthy_obj, layer = 'data', assay = "RNA")
   
 clusters <- healthy_obj$seurat_clusters
 exp.matrix <- as.SingleCellExperiment(healthy_obj,slot = 'data', assay = "RNA")
@@ -863,7 +863,7 @@ all_markers <- FindAllMarkers(
 
 ref <- celldex::HumanPrimaryCellAtlasData()
 
-expression_matrix <- GetAssayData(healthy_obj, slot = 'data', assay = "RNA")
+expression_matrix <- GetAssayData(healthy_obj, layer = 'data', assay = "RNA")
   
 clusters <- healthy_obj$seurat_clusters
 exp.matrix <- as.SingleCellExperiment(healthy_obj,slot = 'data', assay = "RNA")
@@ -919,7 +919,7 @@ all_markers <- FindAllMarkers(
 
 ref <- celldex::HumanPrimaryCellAtlasData()
 
-expression_matrix <- GetAssayData(malignant_obj, slot = 'data', assay = "RNA")
+expression_matrix <- GetAssayData(malignant_obj, layer = 'data', assay = "RNA")
   
 clusters <- malignant_obj$seurat_clusters
 exp.matrix <- as.SingleCellExperiment(malignant_obj,slot = 'data', assay = "RNA")
@@ -958,7 +958,7 @@ all_markers <- FindAllMarkers(
 
 ref <- celldex::HumanPrimaryCellAtlasData()
 
-expression_matrix <- GetAssayData(malignant_obj, slot = 'data', assay = "RNA")
+expression_matrix <- GetAssayData(malignant_obj, layer = 'data', assay = "RNA")
   
 clusters <- malignant_obj$seurat_clusters
 
@@ -1335,10 +1335,6 @@ for (pw in pathways.show) {
 
 ```{r}
 
-weight.max <- getMaxWeight(object.list, slot.name = c("netP"), attribute = pathways.show) # control the edge weights across different datasets
-
-par(mfrow = c(1,2), xpd=TRUE)
-
 for (pw in pathways.show) {
   max.w <- getMaxWeight(object.list, slot.name = "netP", attribute = pw)[1]
   par(mfrow = c(1, 2), xpd = TRUE)
@@ -1366,7 +1362,7 @@ for (pw in pathways.show) {
     type = "violin") +
     plot_annotation(
          title = paste("Expression of", pw, "Pathway Genes"),
-         subtitle = "Healthy = blue  |  Malignant = red"
+         subtitle = "Healthy = red  |  Malignant = teal"
        )  
   
   print(p)

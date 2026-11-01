@@ -2,7 +2,7 @@
 
 A comparative single-cell RNA-seq analysis of healthy and multiple myeloma bone marrow, completed as a group project for the Single-Cell RNA-Seq course of the Postgraduate Bioinformatics Diploma at Nile University.
 
-**Authors:** Yasmine M. Elgohary, Mohammed A. Refaey, Tuqa N. Mahmoud, Mohamed M. Wafy
+**Authors:** Yasmine M. Elgohary, Mohammed Refaey, Tuqa N. Mahmoud, Mohamed M. Wafy
 
 ## Question
 
@@ -14,11 +14,15 @@ The data are two 10X Genomics 3' GEX bone marrow samples from GEO accession GSE1
 
 ## Results
 
-Quality filtering retained 12,761 of 13,685 input cells and 18,546 of 33,538 detected genes. Cell-cycle scoring assigned 7,929 cells to G1, 2,528 to S, and 2,304 to G2M. Differential expression returned 2,061 significant genes, 1,017 up-regulated in malignant and 1,044 down. The up-regulated set is dominated by immunoglobulin and plasma-cell markers (IGLV3-1, IGLC2, JCHAIN, MZB1, DERL3, CAMP), consistent with an expanded myeloma plasma-cell compartment; the down-regulated set is marked by loss of classical monocyte and myeloid receptors (CYP1B1, ALPL, CCR1, SIGLEC10, CD14, CREB5). Louvain clustering at resolution 0.4 yielded 16 clusters per condition, and SingleR identified 16 shared cell types spanning the hematopoietic hierarchy: HSC-G-CSF, CMP, GMP, MEP, Pro-B and Pre-B cells, B cells, T cells, NK cells, monocytes, myelocytes, pro-myelocytes, neutrophils, erythroblasts, platelets, and a BM compartment. CellChat recovered 454 highly variable ligand-receptor pairs and 36 signalling pathways in healthy versus 502 pairs and 22 pathways in malignant, and the aggregated networks show a 31% reduction in inferred interaction count (872 to 602) and a 41% reduction in cumulative interaction strength (20.142 to 11.876) in the malignant sample. Against this backdrop of overall signalling contraction, three pathways stand out as enriched in the malignant niche and align with known MM immune-evasion mechanisms: MIF (MIF–CD74–CXCR4/CD44, associated with M2-like macrophage polarization), GALECTIN (LGALS9–CD44/CD45/HAVCR2, linked to T-cell exhaustion), and ANNEXIN (ANXA1–FPR1/FPR2, sustaining a suppressive myeloid environment).
+Quality filtering retained 12,761 of 13,685 input cells and 18,546 of 33,538 detected genes. Cell-cycle scoring assigned 7,929 cells to G1, 2,528 to S, and 2,304 to G2M. Differential expression returned 2,061 significant genes, 1,017 up-regulated in malignant and 1,044 down. The up-regulated set is dominated by immunoglobulin and plasma-cell markers (IGLV3-1, IGLC2, JCHAIN, MZB1, DERL3, CAMP), consistent with an expanded myeloma plasma-cell compartment; the down-regulated set is marked by loss of classical monocyte and myeloid receptors (CYP1B1, ALPL, CCR1, SIGLEC10, CD14, CREB5). Louvain clustering at resolution 0.4 yielded 16 clusters per condition, and SingleR identified 16 shared cell types spanning the hematopoietic hierarchy: HSC-G-CSF, CMP, GMP, MEP, Pro-B and Pre-B cells, B cells, T cells, NK cells, monocytes, myelocytes, pro-myelocytes, neutrophils, erythroblasts, platelets, and a BM compartment. CellChat recovered 454 highly variable ligand-receptor pairs and 36 signalling pathways in healthy versus 502 pairs and 22 pathways in malignant, and the aggregated networks show a 31% reduction in inferred interaction count (872 to 602) and a 41% reduction in cumulative interaction strength (20.142 to 11.876) in the malignant sample. Against this backdrop of overall signalling contraction, three immunomodulatory pathways were examined in detail. MIF (MIF–CD74–CXCR4/CD44) is clearly reduced in the malignant sample (about half the healthy communication probability; share of the network 13% to 11%), and MIF, CD74 and CD44 expression is lower in most cell types. ANNEXIN (ANXA1–FPR1/FPR2) is weaker in absolute terms but takes a larger share of the remaining network (12% to 16%), centred on myeloid cells. GALECTIN (LGALS9–CD44/CD45/P4HB), sent mainly by monocytes, reaches significance in more cell pairs in the malignant sample, including NK and T cells, while individual interactions are slightly weaker. ANNEXIN and GALECTIN are therefore relatively preserved within a suppressed network and are candidate immune-regulatory axes; with one sample per condition these patterns are descriptive.
 
 ## Tools
 
 R with Seurat, SCpubr, and scater for the core single-cell workflow; SingleR with celldex (`HumanPrimaryCellAtlasData`) for reference-based annotation; CellChat with `CellChatDB.human` for cell-cell communication inference; EnhancedVolcano and ComplexHeatmap for visualization; clustree for clustering-resolution diagnostics; SCTransform for normalization and variance stabilization; tidyverse for general data wrangling; SeuratDisk and readr for I/O.
+
+## Limitations
+
+The comparison uses one healthy and one malignant sample, so differences in composition, expression and inferred communication are descriptive and cannot be tested statistically. CellChat probabilities were compared between two single-sample networks only.
 
 ## Data
 
@@ -33,6 +37,7 @@ Open `Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironmen
 - `Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.Rmd`: full analysis script
 - `Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.pdf`: written report
 - `_Presentation__Single-Cell_Dissection_of_Healthy_vs_Malignant_Bone_Marrow_Microenvironments.pdf`: project presentation
-- `ClusterMarkers.csv`: FindAllMarkers output table
+- `Markers.csv`: differential expression table, malignant vs healthy (`FindMarkers`, with an Up/Down annotation)
 - `README.md`
+- `LICENSE`
 - `.gitignore`
