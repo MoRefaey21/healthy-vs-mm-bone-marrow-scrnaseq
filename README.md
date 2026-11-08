@@ -1,8 +1,10 @@
 # Single-Cell Dissection of Healthy vs Malignant Bone Marrow Microenvironments
 
-A comparative single-cell RNA-seq analysis of healthy and multiple myeloma bone marrow, completed as a group project for the Single-Cell RNA-Seq course of the Postgraduate Bioinformatics Diploma at Nile University.
+A comparative single-cell RNA-seq analysis of healthy and multiple myeloma bone marrow, originally developed as a group project for the Single-Cell RNA-Seq course of the Postgraduate Bioinformatics Diploma at Nile University and since re-implemented individually.
 
-**Authors:** Yasmine M. Elgohary, Mohammed Refaey, Tuqa N. Mahmoud, Mohamed M. Wafy
+**Author:** Mohammed Refaey
+
+Originally a four-person group project with Yasmine M. Elgohary, Tuqa N. Mahmoud and Mohamed M. Wafy. The analysis in this repository was fully re-implemented by Mohammed Refaey in 2026, with the agreement of the original team.
 
 ## Question
 
